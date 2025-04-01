@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            background: #fff;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        input[type="text"], input[type="email"] {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        li button {
+            background-color: #dc3545;
+        }
+        li button:hover {
+            background-color: #c82333;
+        }
+        .input-container, .email-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Список дел</h1>
+    <div class="input-container">
+        <input type="text" id="new-task" placeholder="Добавить задачу">
+        <button onclick="addTask()">Добавить</button>
+    </div>
+    <ul id="task-list"></ul>
+    <div class="email-container">
+        <input type="email" id="email-input" placeholder="Введите email">
+        <button onclick="sendEmail()">Отправить по e-mail</button>
+    </div>
+
+    <script>
+        const socket = io();  // Подключение к WebSocket
+
+        // Загрузка задач при старте
+        async function loadTasks() {
+            let response = await fetch('/tasks');
+            let tasks = await response.json();
+            let list = document.getElementById("task-list");
+            list.innerHTML = "";
+            tasks.forEach(task => {
+                let item = document.createElement("li");
+                item.textContent = task.text;
+                item.setAttribute("data-id", task.id);
+                let deleteButton = document.createElement("button");
+                deleteButton.textContent = "❌";
+                deleteButton.onclick = () => deleteTask(task.id);
+                item.appendChild(deleteButton);
+                list.appendChild(item);
+            });
+        }
+
+        // Добавление задачи
+        async function addTask() {
+            let taskText = document.getElementById("new-task").value;
+            if (!taskText) return;
+            await fetch('/tasks', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ text: taskText })
+            });
+            document.getElementById("new-task").value = "";
+        }
+
+        // Удаление задачи
+        async function deleteTask(taskId) {
+            await fetch(`/tasks/${taskId}`, { method: 'DELETE' });
+        }
+
+        // Отправка email
+        async function sendEmail() {
+            let email = document.getElementById("email-input").value;
+            if (!email) {
+                alert("Пожалуйста, введите email!");
+                return;
+            }
+            let response = await fetch('/send-email', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: email })
+            });
+            let result = await response.json();
+            alert(result.message || result.error);
+            document.getElementById("email-input").value = "";
+        }
+
+        // Обработка добавления задачи через WebSocket
+        socket.on('task_added', (task) => {
+            let list = document.getElementById("task-list");
+            let item = document.createElement("li");
+            item.textContent = task.text;
+            item.setAttribute("data-id", task.id);
+            let deleteButton = document.createElement("button");
+            deleteButton.textContent = "❌";
+            deleteButton.onclick = () => deleteTask(task.id);
+            item.appendChild(deleteButton);
+            list.appendChild(item);
+        });
+
+        // Обработка удаления задачи через WebSocket
+        socket.on('task_deleted', (data) => {
+            let list = document.getElementById("task-list");
+            let items = list.getElementsByTagName("li");
+            for (let item of items) {
+                if (item.getAttribute("data-id") == data.id) {
+                    item.remove();
+                    break;
+                }
+            }
+        });
+
+        // Начальная загрузка задач
+        loadTasks();
+    </script>
+</body>
+</html>
